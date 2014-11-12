@@ -22,34 +22,14 @@ module SoundCloud
       raise ArgumentError, "At least a client_id or an access_token must be present" if client_id.nil? && access_token.nil?
     end
 
-    def get(path, query={}, options={})
-      handle_response {
-        self.class.get(*construct_query_arguments(path, options.merge(:query => query)))
-      }
-    end
-
-    def post(path, body={},  options={})
-      handle_response {
-        self.class.post(*construct_query_arguments(path, options.merge(:body => body), :body))
-      }
-    end
-
-    def put(path, body={},  options={})
-      handle_response {
-        self.class.put(*construct_query_arguments(path, options.merge(:body => body), :body))
-      }
-    end
-
-    def delete(path, query={}, options={})
-      handle_response {
-        self.class.delete(*construct_query_arguments(path, options.merge(:query => query)))
-      }
-    end
-
-    def head(path, query={}, options={})
-      handle_response {
-        self.class.head(*construct_query_arguments(path, options.merge(:query => query)))
-      }
+    methods = { get: :query, post: :body, put: :body, delete: :query, head: :query }
+    
+    methods.keys.each do |m|
+      define_method(m) do |path, query_body={}, options={}|
+        handle_response {
+          self.class.send(m, *construct_query_arguments(path, options.merge(methods[m] => query_body), methods[m]))
+        }
+      end
     end
 
     # accessors for options
@@ -107,25 +87,7 @@ module SoundCloud
       store_options(options)
       raise ArgumentError, 'client_id and client_secret is required to retrieve an access_token' if client_id.nil? || client_secret.nil?
       client_params = {:client_id => client_id, :client_secret => client_secret}
-      params = if options_for_refresh_flow_present?
-        {
-          :grant_type => 'refresh_token',
-          :refresh_token => refresh_token,
-        }
-      elsif options_for_credentials_flow_present?
-        {
-          :grant_type => 'password',
-          :username => @options[:username],
-          :password => @options[:password],
-        }
-      elsif options_for_code_flow_present?
-        {
-          :grant_type => 'authorization_code',
-          :redirect_uri => @options[:redirect_uri],
-          :code => @options[:code],
-        }
-      end
-      params.merge!(client_params)
+      params = params_from_options.merge!(client_params)
       response = handle_response(false) {
         self.class.post("https://#{api_host}#{TOKEN_PATH}", :query => params)
       }
@@ -193,6 +155,27 @@ module SoundCloud
         "#{scheme}://#{api_host}#{path}#{uri.query ? "?#{uri.query}" : ""}",
         options
       ]
+    end
+
+    def params_from_options
+      if options_for_refresh_flow_present?
+        {
+          :grant_type => 'refresh_token',
+          :refresh_token => refresh_token,
+        }
+      elsif options_for_credentials_flow_present?
+        {
+          :grant_type => 'password',
+          :username => @options[:username],
+          :password => @options[:password],
+        }
+      elsif options_for_code_flow_present?
+        {
+          :grant_type => 'authorization_code',
+          :redirect_uri => @options[:redirect_uri],
+          :code => @options[:code],
+        }
+      end
     end
 
   end
